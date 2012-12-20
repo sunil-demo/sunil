@@ -1,0 +1,25 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation Sample Template EC2WithEBSPIOPs: Create an Amazon EC2 instance running the Amazon Linux AMI with a new EBS volume attached that has provisioned IOPs. The instance and the volume are pinned to the same availability zone. We recommend that you do untargeted launches rather than pinning instances this way.The AMI is chosen based on the region in which the stack is run. **WARNING** This template creates an Amazon EC2 instance and an EBS Volume. You will be billed for the AWS resources used if you create a stack from this template.",
+  
+  "Resources" : {
+
+    "NewVolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : "100",
+        "VolumeType" : "io1",
+        "Iops" : "100",
+        "AvailabilityZone" : "us-east-1a"
+      }
+    }
+  },
+
+  "Outputs" : {
+    "VolumeId" : {
+      "Description" : "InstanceId of the newly created EC2 instance",
+      "Value" : { "Ref" : "NewVolume" }
+    }
+  }
+}
