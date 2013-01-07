@@ -18,7 +18,7 @@
 
   "Outputs" : {
     "VolumeId" : {
-      "Description" : "InstanceId of the newly created EC2 instance",
+      "Description" : "InstanceId of the newly created EC2 instance and shows in the console",
       "Value" : { "Ref" : "NewVolume" }
     }
   }
