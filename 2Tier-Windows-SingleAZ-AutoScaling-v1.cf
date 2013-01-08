@@ -1,0 +1,375 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+	"Description" : "This script is used provision EC2 resources and RDS instances. It will create  EC2 instances with two autoscaling groups, One Elastic load balancer in different availability zones on virtual private cloud. Autoscaling group is associated with SNS topic for notification. Internallally it will create one SNS topic and Route 53 record for provided dns name and also it will create security groups on virtual private cloud used by autoscaling group. ",
+	"Parameters" : {
+		"InstanceType" : {
+		  "Description" : "AppServer EC2 instance type",
+		  "Type" : "String",
+		  "Default" : "t1.micro",
+		  "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+		  "ConstraintDescription" : "must be a valid EC2 instance type."
+		},
+		"KeyName" : {
+		  "Description" : "Name of and existing EC2 KeyPair to enable SSH access to the instance",    "Type" : "String"
+		},
+		"AvailabilityZone" : {
+		  "Description" : "AvailabilityZone for launching WebServer Scaling Group (Private Subnet One)",
+		  "Type" : "String"
+		},
+		"MinSize" : {
+		  "Description" : "The minimum size of the auto scaling group.",
+		  "Default" : "1",
+		  "Type": "Number"
+		},
+		"MaxSize" : {
+		  "Description" : "The maximum size of the auto scaling group.",
+		  "Default" : "5",
+		  "Type": "Number"
+		},
+		"Cooldown" : {
+		  "Description" : "The amount of time, in seconds.",
+		  "Default" : "60",
+		  "Type": "Number"
+		},
+		"ScalingUpAdjustment" : {
+		  "Description" : "The number of instances by which to scale up.",
+		  "Default" : "1",
+		  "Type": "Number"
+		},
+		"ScalingDownAdjustment" : {
+		  "Description" : "The number of instances by which to scale down.",
+		  "Default" : "-1",
+		  "Type": "Number"
+		},
+		"Period" : {
+		  "Description" : "The period in seconds over which the specified statistic is applied.",
+		  "Default" : "300",
+		  "Type": "Number"
+		},
+		"EvaluationPeriods" : {
+		  "Description" : "The no of periods over which data is compared to the specified threshold.",
+		  "Default" : "2",
+		  "Type": "Number"
+		},
+		"MinThreshold" : {
+		  "Description" : "The value against which the specified statistic is compared.",
+		  "Default" : "60",
+		  "Type": "Number"
+		},
+		"MaxThreshold" : {
+		  "Description" : "The value against which the specified statistic is compared.",
+		  "Default" : "90",
+		  "Type": "Number"
+		},
+		"WebServerPort" : {
+		  "Description" : "TCP/IP port of the web server",
+		  "Type" : "String",
+		  "Default" : "8080"
+		},
+		"LoadBalancerPort" : {
+		  "Description" : "Specifies the external load balancer port number.",
+		  "Type" : "String",
+		  "Default" : "80"
+		},
+		"Protocol" : {
+		  "Description" : "Load balancer transport protocol(Ex : HTTP) to use for routing.",
+		  "Type" : "String",
+		  "Default" : "HTTP"
+		},
+		"Path" : {
+		  "Description" : "Load balancer ping path for HelthCheck.",
+		  "Type" : "String",
+		  "Default" : "/"
+		},
+		"MailId" : {
+		  "Description" : "Email ID for notification",
+		  "Type" : "String"
+		},
+		"VPC" : {
+		  "Type" : "String",
+		  "Description" : "ID of the VPC"
+		},
+		"PublicSubnet" : {
+		  "Type" : "String",
+		  "Description" : "Id of the Public Subnet (LoadBalancer)"
+		},
+		"PrivateSubnetOne" : {
+		  "Type" : "String",
+		  "Description" : "Id of the private Subnet"
+		},
+		"PrivateSubnetTwo" : {
+		  "Type" : "String",
+		  "Description" : "Id of the private Subnet"
+		},
+		"DBName": {
+		  "Default": "MyDatabase",
+		  "Description" : "The database name",
+		  "Type": "String",
+		  "MinLength": "1",
+		  "MaxLength": "64",
+		  "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+		  "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+		},
+		"DBUsername": {
+		  "Default": "admin",
+		  "NoEcho": "true",
+		  "Description" : "The database admin account username",
+		  "Type": "String",
+		  "MinLength": "1",
+		  "MaxLength": "16",
+		  "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+		  "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+		},
+		"DBPassword": {
+		  "Default": "admin",
+		  "NoEcho": "true",
+		  "Description" : "The database admin account password",
+		  "Type": "String",
+		  "MinLength": "1",
+		  "MaxLength": "41",
+		  "AllowedPattern" : "[a-zA-Z0-9]*",
+		  "ConstraintDescription" : "must contain only alphanumeric characters."
+		},
+
+		"DBClass" : {
+		  "Default" : "db.m1.small",
+		  "Description" : "Database instance class",
+		  "Type" : "String",
+		  "AllowedValues" : [ "db.m1.small", "db.m1.large", "db.m1.xlarge", "db.m2.xlarge", "db.m2.2xlarge", "db.m2.4xlarge" ],
+		  "ConstraintDescription" : "must select a valid database instance type."
+		},
+
+		"DBAllocatedStorage" : {
+		  "Default": "5",
+		  "Description" : "The size of the database (GB)",
+		  "Type": "Number",
+		  "MinValue": "5",
+		  "MaxValue": "1024",
+		  "ConstraintDescription" : "must be between 5 and 1024GB."
+		}
+	},
+	"Mappings": {
+        "RegionMap": {
+            "us-east-1": {
+                "AMI": "ami-32b9065b"
+            },
+            "us-west-1": {
+                "AMI": "ami-1fd6f15a"
+            },
+            "us-west-2": {
+                "AMI": "ami-381c9408"
+            },
+            "eu-west-1": {
+                "AMI": "ami-911616e5"
+            },
+            "sa-east-1": {
+                "AMI": "ami-ea0ed7f7"
+            },
+            "ap-southeast-1": {
+                "AMI": "ami-ccb5f59e"
+            },
+            "ap-southeast-2": {
+                "AMI": "ami-23980f19"
+            },
+            "ap-northeast-1": {
+                "AMI": "ami-984ff099"
+            }
+        }
+    },
+	"Resources" : {
+		"WebServerGroup" : {
+		  "Type" : "AWS::AutoScaling::AutoScalingGroup",
+		  "Properties" : {
+			"AvailabilityZones" : [ {"Ref" : "AvailabilityZone"} ],
+			"VPCZoneIdentifier" : [{ "Ref" : "PrivateSubnetOne" }],
+			"LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+			"MinSize" : { "Ref" : "MinSize" },
+			"MaxSize" : { "Ref" : "MaxSize" },
+			"LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+			"NotificationConfiguration" : {
+			  "TopicARN" : { "Ref" : "SNSTopic" },
+			  "NotificationTypes" : [ "autoscaling:EC2_INSTANCE_LAUNCH","autoscaling:EC2_INSTANCE_LAUNCH_ERROR","autoscaling:EC2_INSTANCE_TERMINATE", "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"]
+			}
+		  }
+		},
+		"LaunchConfig" : {
+		  "Type" : "AWS::AutoScaling::LaunchConfiguration",
+		  "Properties" : {
+			"ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+			"KeyName" : { "Ref" : "KeyName" },
+			"UserData" : { "Fn::Base64" : { "Ref" : "WebServerPort" }},
+			"SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+			"InstanceType" : { "Ref" : "InstanceType" }
+		  }
+		},
+		"WebServerScaleUpPolicy" : {
+		  "Type" : "AWS::AutoScaling::ScalingPolicy",
+		  "Properties" : {
+			"AdjustmentType" : "ChangeInCapacity",
+			"AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+			"Cooldown" : { "Ref" : "Cooldown" },
+			"ScalingAdjustment" : { "Ref" : "ScalingUpAdjustment" }
+		  }
+		},
+		"WebServerScaleDownPolicy" : {
+		  "Type" : "AWS::AutoScaling::ScalingPolicy",
+		  "Properties" : {
+			"AdjustmentType" : "ChangeInCapacity",
+			"AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+			"Cooldown" : { "Ref" : "Cooldown" },
+			"ScalingAdjustment" : { "Ref" : "ScalingDownAdjustment" }
+		  }
+		},
+		"WebServerCPUAlarmHigh": {
+		 "Type": "AWS::CloudWatch::Alarm",
+		 "Properties": {
+			"AlarmDescription": "Scale-up if CPU utilization reaches max threshold",
+			"MetricName": "CPUUtilization",
+			"Namespace": "AWS/EC2",
+			"Statistic": "Average",
+			"Period": { "Ref" : "Period" },
+			"EvaluationPeriods": { "Ref" : "EvaluationPeriods" },
+			"Threshold": { "Ref" : "MaxThreshold" },
+			"AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" },{"Ref": "SNSTopic"} ],
+			"Dimensions": [
+			  {
+				"Name": "AutoScalingGroupName",
+				"Value": { "Ref": "WebServerGroup" }
+			  }
+			],
+			"ComparisonOperator": "GreaterThanThreshold"
+		  }
+		},
+		"WebServerCPUAlarmLow": {
+		 "Type": "AWS::CloudWatch::Alarm",
+		 "Properties": {
+			"AlarmDescription": "Scale-down if CPU utilization reaches Min Threshold",
+			"MetricName": "CPUUtilization",
+			"Namespace": "AWS/EC2",
+			"Statistic": "Average",
+			"Period": { "Ref" : "Period" },
+			"EvaluationPeriods": { "Ref" : "EvaluationPeriods" },
+			"Threshold": { "Ref" : "MinThreshold" },
+			"AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" }, {"Ref": "SNSTopic"}],
+			"Dimensions": [
+			  {
+				"Name": "AutoScalingGroupName",
+				"Value": { "Ref": "WebServerGroup" }
+			  }
+			],
+			"ComparisonOperator": "LessThanThreshold"
+		  }
+		},
+		"SNSTopic" : {
+			"Type" : "AWS::SNS::Topic",
+			"Properties" : {
+			   "DisplayName" : "NotifiacationAlert",
+			   "Subscription" : [ { "Endpoint" : {"Ref": "MailId"}, "Protocol" : "Email"}]
+			}   
+		},
+		"ElasticLoadBalancer" : {
+		  "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+		  "Properties" : {
+			"SecurityGroups" : [ { "Ref" : "LoadBalancerSecurityGroup" } ],
+			"Subnets" : [{ "Ref" : "PublicSubnet" } ],
+			"Listeners" : [ {
+			  "LoadBalancerPort" : { "Ref" : "LoadBalancerPort" },
+			  "InstancePort" : { "Ref" : "WebServerPort" },
+			  "Protocol" : { "Ref" : "Protocol" }
+			} ],
+			"HealthCheck" : {
+			  "Target" : { "Fn::Join" : [ "", [{ "Ref" : "Protocol" },":", { "Ref" : "WebServerPort" }, { "Ref" : "Path" }]]},
+			  "HealthyThreshold" : "3",
+			  "UnhealthyThreshold" : "5",
+			  "Interval" : "30",
+			  "Timeout" : "5"
+			}
+		  }
+		},
+
+		"LoadBalancerSecurityGroup" : {
+		  "Type" : "AWS::EC2::SecurityGroup",
+		  "Properties" : {
+			"GroupDescription" : "Enable HTTP access on port load balancer",
+			"VpcId" : { "Ref" : "VPC" },
+			"SecurityGroupIngress" : [ { 
+			  "IpProtocol" : "tcp",
+			  "FromPort" : { "Ref" : "LoadBalancerPort" },
+			  "ToPort" : { "Ref" : "LoadBalancerPort" },
+			  "CidrIp" : "0.0.0.0/0"
+			} ],
+			"SecurityGroupEgress" : [ { 
+			  "IpProtocol" : "tcp",
+			  "FromPort" : { "Ref" : "WebServerPort" },
+			  "ToPort" : { "Ref" : "WebServerPort" },
+			  "CidrIp" : "0.0.0.0/0"
+			} ]
+		  }
+		},
+		"InstanceSecurityGroup" : {
+		  "Type" : "AWS::EC2::SecurityGroup",
+		  "Properties" : {
+			"GroupDescription" : "Enable HTTP access on the configured port",
+			"VpcId" : { "Ref" : "VPC" },
+			"SecurityGroupIngress" : [ { 
+			  "IpProtocol" : "tcp",
+			  "FromPort" : { "Ref" : "WebServerPort" },
+			  "ToPort" : { "Ref" : "WebServerPort" },
+			  "SourceSecurityGroupId" : { "Ref" : "LoadBalancerSecurityGroup" }
+			} ]
+		  }
+		},
+		"MyDBSubnetGroup" : {
+		  "Type" : "AWS::RDS::DBSubnetGroup",
+		  "Properties" : {
+			"DBSubnetGroupDescription" : "Subnets available for the RDS DB Instance",
+			"SubnetIds" : [{ "Ref" : "PrivateSubnetOne" }, { "Ref" : "PrivateSubnetTwo" }]
+		  }
+		},
+
+		"MyDBSecurityGroup" : {
+		  "Type" : "AWS::RDS::DBSecurityGroup",
+		  "Properties" : {
+			"GroupDescription" : "Security group for RDS DB Instance",
+			"EC2VpcId" : { "Ref" : "VPC" }
+		  }
+		},
+		"MyDB" : {
+		  "Type" : "AWS::RDS::DBInstance",
+		  "Properties" : {
+			"DBName" : { "Ref" : "DBName" },
+			"MultiAZ" : "false",
+			"AllocatedStorage" : { "Ref" : "DBAllocatedStorage" },
+			"DBInstanceClass" : { "Ref" : "DBClass" },
+			"Engine" : "MySQL",
+			"EngineVersion" : "5.5",
+			"MasterUsername" : { "Ref" : "DBUsername" } ,
+			"MasterUserPassword" : { "Ref" : "DBPassword" },
+			"DBSubnetGroupName" : { "Ref" : "MyDBSubnetGroup" },
+			"DBSecurityGroups" : [ { "Ref" : "MyDBSecurityGroup" } ]
+		  }
+		}
+	},
+	"Outputs" : {
+		"WebServerURL" : {
+		  "Description" : "The URL of the website",
+		  "Value" :  { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]}
+		},
+		"MySQLDatabase" : {
+		  "Description" : "MySQLDatabase is created sucessfully.",
+		  "Value" :  { "Ref" : "MyDB" }
+		},
+		"SNSTopic" : {
+		  "Description" : "SNSTopic is created sucessfully.",
+		  "Value" :  { "Ref" : "SNSTopic" }
+		}
+	}
+}	
