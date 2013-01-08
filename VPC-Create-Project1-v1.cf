@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "This template is used to create One VPC with One Public Subnet and Two Private Subnets",
+    "Description": "This is a template for the used to create One VPC with One Public Subnet and Two Private Subnets",
     "Parameters": {
         "AvailabilityZoneOne": {
             "Description": "Availability Zone for Subnet One",
