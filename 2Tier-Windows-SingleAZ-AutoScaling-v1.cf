@@ -1,6 +1,6 @@
 {
 	"AWSTemplateFormatVersion" : "2010-09-09",
-	"Description" : "This script is very usefull is used provision EC2 resources and RDS instances. It will create  EC2 instances with two autoscaling groups, One Elastic load balancer in different availability zones on virtual private cloud. Autoscaling group is associated with SNS topic for notification. Internallally it will create one SNS topic and Route 53 record for provided dns name and also it will create security groups on virtual private cloud used by autoscaling group. ",
+	"Description" : "This script is very usefull and  is used provision EC2 resources and RDS instances. It will create  EC2 instances with two autoscaling groups, One Elastic load balancer in different availability zones on virtual private cloud. Autoscaling group is associated with SNS topic for notification. Internallally it will create one SNS topic and Route 53 record for provided dns name and also it will create security groups on virtual private cloud used by autoscaling group. ",
 	"Parameters" : {
 		"InstanceType" : {
 		  "Description" : "AppServer EC2 instance type",
